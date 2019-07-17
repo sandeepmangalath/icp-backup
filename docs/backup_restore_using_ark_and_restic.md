@@ -3,9 +3,9 @@
 In this document, we will describe how to back up and restore your containerized applications running on IBM Cloud Private (ICP) environment using Ark and Restic.
 
 
-### Introduction to Veloro (also known as Ark) and Restic
+### Introduction to Velero (also known as Ark) and Restic
 
-[Veloro](https://github.com/heptio/velero); also known as Ark is an open source, kubernetes backup recovery utility from Heptio. As of writing this article, the Heptio team and the community contributors are aggressively working on the first Velero release and migrating current Ark deployments to Velero. For the purpose of this article we will refer to the backup utility as Ark.
+[Velero](https://github.com/heptio/velero); also known as Ark is an open source, kubernetes backup recovery utility from Heptio. As of writing this article, the Heptio team and the community contributors are aggressively working on the first Velero release and migrating current Ark deployments to Velero. For the purpose of this article we will refer to the backup utility as Ark.
 
 Ark provides backup and restore capabilities for all or part of your kubernetes cluster. It backs up all tags, deployments, persistent volumes, and more. Since v0.6.0, Ark has adopted a plugin model which enables anyone to easily implement additional object and block storage backends, outside of the main Ark repository.
 
