@@ -1,26 +1,37 @@
-# Backup and Restore of Applications running on ICP using Ark and Restic
+# Backup and Restore of Applications running on RedHat OpenShift using Velero
 
-In this document, we will describe how to back up and restore your containerized applications running on IBM Cloud Private (ICP) environment using Ark and Restic.
+In this document, we will describe how to back up and restore your containerized applications running on RedHat OpenShift (RHOS) environment using Velero.
 
 
-### Introduction to Velero (also known as Ark) and Restic
+### Introduction to Veloro
 
-[Velero](https://github.com/heptio/velero); also known as Ark is an open source, kubernetes backup recovery utility from Heptio. As of writing this article, the Heptio team and the community contributors are aggressively working on the first Velero release and migrating current Ark deployments to Velero. For the purpose of this article we will refer to the backup utility as Ark.
+[Veloro](https://github.com/vmware-tanzu/velero) is an open source, kubernetes backup recovery utility laregely contributed by Heptio team. As of writing this article, Heptio has been acquired by VMware and the community contributors have aggressively worked on the assimilation of Velero as a first class citizen in VMware's Tanzu mission critical portfolio.
 
-Ark provides backup and restore capabilities for all or part of your kubernetes cluster. It backs up all tags, deployments, persistent volumes, and more. Since v0.6.0, Ark has adopted a plugin model which enables anyone to easily implement additional object and block storage backends, outside of the main Ark repository.
+Velero provides backup and restore capabilities for all or part of your kubernetes cluster. It backs up all tags, deployments, persistent volumes, and more. Since v0.6.0, Velero has adopted a plugin model which enables anyone to easily implement additional object and block storage backends, outside of the main Velero repository. This allows 
 
-With the [integration of Restic](https://blog.heptio.com/ark-v0-9-alpha-now-with-restic-14ad6b402ab3), Ark now natively supports backing up and restoring data from any Kubernetes volume or persistent volume. Restic takes file-level backups of your data, and has several key features that make it a great fit for Ark’s needs:
+Velero natively supports backing up and restoring data from any Kubernetes volume or persistent volume and.can be used to restore individual crds, or deamon set; practically any kubernetes resources via Custom Resource Definitions.  Each Velero operation -- on-demand backup, scheduled backup, restore -- is a custom resource, defined with a Kubernetes Custom Resource Definition (CRD) and stored in etcd. Velero also includes controllers that process the custom resources to perform backups, restores, and all related operations.
 
-* Supports multiple storage backends, including IBM Cloud Object Storage, Amazon S3, Google Cloud Storage, Azure Blob Storage, and Minio
+This facilitates back up or restore of all objects in the cluster, or more granular filtering of objects by type, namespace, and/or label.
+
+Velero is ideal for the disaster recovery use case, as well as for snapshotting your application state, prior to performing system operations on your cluster (e.g. upgrades).
+
+
+* Supports multiple storage backends, including IBM Cloud Object Storage, Amazon S3, Google Cloud Storage, Azure Blob Storage, and Minio amongst others
 * Fully encrypts backup data at rest and in transit with AES-256 in counter mode
 * Only backs up data that has changed since the prior backup, using content-defined chunking
 * De-duplicates data within a single backup for efficient use of storage
 
 ![](./images/ark/ct_quote.png)
 
+
 ### Scope
 
-In this guide, we will set up and configure the Ark client on a local machine, and deploy the Ark server into our Kubernetes cluster. We'll then deploy a sample Nginx app that uses a Persistent Volume for logging, backup the application to IBM Cloud Object Storage, simulate a disaster recovery scenario and restore the application with its persistent volume.
+This guide provides an overview and guidance on when it is applicable to use Velero for backup and restore operations. It also provides an IBM opinated view on the Velero product, its key capabilities and future outlook. Furthure, in demonstrating how it works; this guide the learnings from using Velero to backup and restore a realistic Stateful application that is more commonly encountered in an enterprise setting.
+
+*****************
+Replace
+
+We will set up and configure the Ark client on a local machine, and deploy the Ark server into our Kubernetes cluster. We'll then deploy a sample Nginx app that uses a Persistent Volume for logging, backup the application to IBM Cloud Object Storage, simulate a disaster recovery scenario and restore the application with its persistent volume.
 
 We are following the [companion guide for IBM Cloud Kubernetes Service (IKS)](https://medium.com/@mlrborowski/using-ark-and-restic-to-provide-dr-for-ibm-kubernetes-service-cae53cfe532) with the following differences:
 1. Using ICP vs. IKS
@@ -29,6 +40,27 @@ We are following the [companion guide for IBM Cloud Kubernetes Service (IKS)](ht
 This proves:
 1. The underlying framework including kubernetes is exactly the same in ICP and IKS as the open sourced kubernetes project; supporting portability across public, private and multi-cloud environments.
 2. Ark and Restic is storage agnostic.
+********************
+
+## Usage Guidance
+
+This article does not attempt to compare Velero with other traditional backup and recovery tools; but rather guides the reader on its applicability in next gen architectures based on containers and kubernetes.
+
+While GitOps as a methodology triggering operational tasts including backup and restore are gaining popularity with Site Reliability Engineering (SRE) team; Velero caters to the Traditional IT Operations team in providing snapshot based full and incremental backups in a Cloud native container architecture built using native Kubernetes APIs.
+
+Furthur one important thing to note is that GitOps can only restore Kubernetes objects so that means any persistent data required for an application to correctly function must be restored for stateful applications, such as databases, to be back in service.
+
+###Multi-architecture Container Image Support
+Velero also provides [multi-arch container images support](https://velero.io/blog/velero-1.3-voyage-continues/) by using Docker manifest lists which adds Linux on Power systems support.
+
+###Physical vs. Logical Backups
+
+Apart from Physical backups; logical backups are an important topic to address here as it save time on operational backup tasks, especially in the case of databases to provide a point-in-time application consistent backup. These are triggered on a per workload basis and only extracts the data from the data files into dump files.
+
+Velero supports application consistent backups via the construct of [hooks](https://velero.io/docs/v1.3.2/hooks/). When performing a backup, a user can specify one or more commands to execute in a container in a pod when that pod is being backed up. The commands can be configured to run before any custom action processing ("pre" hooks), or after all custom actions have been completed and any additional items specified by custom action have been backed up ("post" hooks).
+
+Thus the guidance to use Velero when traditional IT teams prefer to back up their containerized applications orchestrated by kubernetes using cloud native  backup and recovery tools based on next gen architectures.
+
 
 ### Solution Overview
 
@@ -371,5 +403,60 @@ kubectl -n nginx-example exec -it nginx-deployment-54c66df98b-6ppt5 -- cat /stor
 hw test it is late
 ```
 
+## Limitations
+Presently known limitations include:
+
+1. Velero only supports a single set of credentials per provider. It's not yet possible to use different credentials for different locations, if they're for the same provider.
+
+2. Volume snapshots are still limited by where your provider allows you to create snapshots. For example, AWS and Azure do not allow you to create a volume snapshot in a different region than where the volume is. If you try to take a Velero backup using a volume snapshot location with a different region than where your cluster's volumes are, the backup will fail.
+
+3. Each Velero backup has one BackupStorageLocation, and one VolumeSnapshotLocation per volume provider. It is not possible (yet) to send a single Velero backup to multiple backup storage locations simultaneously, or a single volume snapshot to multiple locations simultaneously. However, you can always set up multiple scheduled backups that differ only in the storage locations used if redundancy of backups across locations is important.
+
+4. Cross-provider snapshots are not supported. If you have a cluster with more than one type of volume (e.g. EBS and Portworx), but you only have a VolumeSnapshotLocationconfigured for EBS, then Velero will only snapshot the EBS volumes.
+
+5. Restic data is stored under a prefix/subdirectory of the main Velero bucket, and will go into the bucket corresponding to the BackupStorageLocation selected by the user at backup creation time.
+
+## Outlook
+
+Velero's agnostic posture is on close watch as an Open source project.
+
+When assessing the outlook of an open source project it is important to evaluate on 3 key factors:
+1. Ability to nimbly incorporate features benefiting the community
+2. Diversity in contributors and number of active contributions 
+2. Adoption that drives the need for new features functions as additional usecases are identified. 
+
+
+1. Incorporating Community Features
+
+The single most important advancement in Velero is the adoption of Container Storage Interface (CSI). [CSI was developed and made GA in December of 2018 as a standard as of Kubernetes v1.13](https://kubernetes.io/blog/2018/12/03/kubernetes-1-13-release-announcement/) for exposing arbitrary block and file storage storage systems to containerized workloads on Container Orchestration Systems (COs) like Kubernetes. Prior to this, third-party storage code caused reliability and security issues in core Kubernetes binaries and the code was often difficult (and in some cases impossible) for Kubernetes maintainers to test and maintain. With the adoption of the Container Storage Interface, the Kubernetes volume layer becomes truly extensible. Using CSI, third-party storage providers can write and deploy plugins exposing new storage systems in Kubernetes without ever having to touch the core Kubernetes code. This gives Kubernetes users more options for storage and makes the system more secure and reliable.
+
+Shortly after the acquisition of Heptio by VMware, Velero was born as a project. Largely driven by core-contributors from Heptio the community saw early investment in driving tighter integration with VMware.
+
+Features such as support for backup and restore of Stateful [applications running natively on vSphere](https://velero.io/blog/velero-v1-1-stateful-backup-vsphere/) were prioritized over CSI in v1.1.
+
+Furthur, integration into [VMware Tanzu portfolio](https://velero.io/blog/announcing-gh-move/)  in v1.2 was prioritized over much awaited CSI capabilities which is still in beta.
+
+VMware continues to drive proliferation of Velero in its EMC storage family of products. For example Velero is gaining usability features starting with its [deep integration in PowerProtect](https://itzikr.wordpress.com/2019/12/31/dell-emc-powerprotect-19-3-is-available-kubernetes-integration-you-bet/)
+
+Velero's implementation of CSI requires Kubernetes version 1.17 or greater and greatly relies on adoption and testing on the [three main hyperscalar Cloud Service Providers that Velero formally supports](https://velero.io/docs/master/supported-providers/). As a result, the much awaited CSI capability continues to remain in beta. Velero's limited support stance coupled with slow adoption by Cloud Providers on upstream Kubernetes releases is hampering innovation.
+
+As of writing this article, the commercial Cloud Providers list that can realistically test CSI features of Velero are:
+Kubernetes Service                  Latest K8s version supported      
+IBM Kubernetes Service (IKS)    [1.17](https://cloud.ibm.com/docs/containers?topic=containers-cs_versions)               
+and following commercial Cloud Providers list that cannot realistically test CSI features of Velero are:
+Amazon (EKS)                            [1.15.11](https://docs.aws.amazon.com/eks/latest/userguide/kubernetes-versions.html)
+Azure (AKS)                             [1.15.x](https://azure.microsoft.com/en-us/updates/azure-kubernetes-service-will-be-retiring-support-for-kubernetes-versions-1-11-and-1-12/)
+Alibaba (CSK)                            [1.16.6](https://www.alibabacloud.com/help/doc-detail/115453.htm)
+Google (GKE)                            [1.15.11](https://www.alibabacloud.com/help/doc-detail/115453.htm)
+Oracle (CEK)                             [1.15.7](https://docs.cloud.oracle.com/en-us/iaas/releasenotes/changes/37013251-39b2-4c08-8536-906d76bba789/)
+
+2. Contributors:
+As of writing this document [4 of Velero contributors may be considered active and contributing](https://github.com/vmware-tanzu/velero/graphs/contributors)
+
+3. Adoption:
+As of writing this document [Velero has 10 adopters](https://github.com/vmware-tanzu/velero/blob/master/ADOPTERS.md)
+
+
+
 ## Summary
-With this simple usecase, we have proven backup and restore of an application using Arc and Restic. Ark offers a developer friendly option to rapid recovery of container hosted applications and their supporting persistent volumes. The extensible plugin based model makes it possible for developers and administrators to support additional PersistentVolume types. While, its strength lies in the Disaster Recovery space supporting Backup and Restore operations; it can support cluster portability by migrating resources between clusters e.g. between Dev/Test environments or across multiple cloud providers.
+With this simple usecase, we have proven backup and restore of an application using Velero. Velero offers a developer friendly option to rapid recovery of container hosted applications and their supporting persistent volumes. The extensible plugin based model makes it possible for developers and administrators to support additional PersistentVolume types. While, its strength lies in the Disaster Recovery space supporting Backup and Restore operations; it can support cluster portability by migrating resources between clusters e.g. between Dev/Test environments or across multiple cloud providers.
